@@ -22,6 +22,8 @@ class CsrfGuard extends \Slim\Middleware
      */
     protected $key;
 
+    protected $excluded = array();
+
     /**
      * Constructor.
      *
@@ -35,7 +37,24 @@ class CsrfGuard extends \Slim\Middleware
         }
 
         $this->key = $key;
+        $this->excluded = [];
     }
+
+
+    public function addExcludedRoutes($r) {
+        if (is_array($r) && !empty($r)) {
+            foreach($r as $k=>$R) {
+                $r[$k] = $this->app->router()->urlFor($R); // Replace route-name by route-url
+            }   
+            $this->excluded = array_merge($this->excluded, $r);
+        }
+        else if (is_string($r) && !empty($r) ) {
+            $this->excluded[] = $this->app->router()->urlFor($r);
+        }   
+        else
+            throw new \Exception('addExcludedRoutes excepts an array of strings, or a string as parameters');
+    }
+
 
     /**
      * Call middleware.
@@ -68,9 +87,14 @@ class CsrfGuard extends \Slim\Middleware
         }
 
         $token = $_SESSION[$this->key];
+        
+        // Validate the CSRF token (if check is needed)    
+        //var_dump($this->app->router()->urlFor($this->excluded[0]) );
+        //die();
+        $should_check = (!empty($this->excluded) && !in_array($this->app->request()->getResourceUri(), $this->excluded));
+        $should_check_cause_method = in_array($this->app->request()->getMethod(), array('POST', 'PUT', 'DELETE'));
 
-        // Validate the CSRF token.
-        if (in_array($this->app->request()->getMethod(), array('POST', 'PUT', 'DELETE'))) {
+        if ($should_check && $should_check_cause_method) {
             $userToken = $this->app->request()->post($this->key);
             if ($token !== $userToken) {
                 $this->app->halt(400, 'Invalid or missing CSRF token.');
